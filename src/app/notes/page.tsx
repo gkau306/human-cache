@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import NoteList from './components/NoteList';
 import NoteEditor from './components/NoteEditor';
+import { fetchNotes, createNote, updateNote, deleteNote } from '@/lib/api';
 
 export interface Note {
   id: string;
@@ -12,59 +13,93 @@ export interface Note {
 }
 
 export default function NotesPage() {
-  const [notes, setNotes] = useState<Note[]>([
-    { 
-      id: '1', 
-      title: 'Welcome Note', 
-      content: 'Welcome to your notes app!',
-      lastModified: new Date()
-    },
-    { 
-      id: '2', 
-      title: 'Todo List', 
-      content: '1. Buy groceries\n2. Call mom\n3. Finish project',
-      lastModified: new Date(Date.now() - 86400000) // 1 day ago
-    },
-    { 
-      id: '3', 
-      title: 'Ideas', 
-      content: 'Some random ideas for future projects...',
-      lastModified: new Date(Date.now() - 172800000) // 2 days ago
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [selectedNoteId, setSelectedNoteId] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load notes on component mount
+  useEffect(() => {
+    loadNotes();
+  }, []);
+
+  const loadNotes = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const fetchedNotes = await fetchNotes();
+      setNotes(fetchedNotes);
+      
+      // Select the first note if none is selected and notes exist
+      if (fetchedNotes.length > 0 && !selectedNoteId) {
+        setSelectedNoteId(fetchedNotes[0].id);
+      }
+    } catch (err) {
+      setError('Failed to load notes');
+      console.error('Error loading notes:', err);
+    } finally {
+      setLoading(false);
     }
-  ]);
-  
-  const [selectedNoteId, setSelectedNoteId] = useState<string>('1');
+  };
 
   const selectedNote = notes.find(note => note.id === selectedNoteId);
 
-  const updateNote = (updatedNote: Note) => {
-    const noteWithTimestamp = {
-      ...updatedNote,
-      lastModified: new Date()
-    };
-    setNotes(notes.map(note => 
-      note.id === updatedNote.id ? noteWithTimestamp : note
-    ));
-  };
-
-  const addNote = () => {
-    const newNote: Note = {
-      id: Date.now().toString(),
-      title: 'New Note',
-      content: '',
-      lastModified: new Date()
-    };
-    setNotes([newNote, ...notes]); // Add to beginning like Apple Notes
-    setSelectedNoteId(newNote.id);
-  };
-
-  const deleteNote = (id: string) => {
-    const filteredNotes = notes.filter(note => note.id !== id);
-    setNotes(filteredNotes);
-    if (selectedNoteId === id && filteredNotes.length > 0) {
-      setSelectedNoteId(filteredNotes[0].id);
+  const handleUpdateNote = async (updatedNote: Note): Promise<void> => {
+    try {
+      const updated = await updateNote(updatedNote.id, {
+        title: updatedNote.title,
+        content: updatedNote.content
+      });
+      
+      setNotes(notes.map(note => 
+        note.id === updatedNote.id ? updated : note
+      ));
+    } catch (err) {
+      setError('Failed to update note');
+      console.error('Error updating note:', err);
+      throw err; // Re-throw to let the editor know about the error
     }
   };
+
+  const handleAddNote = async () => {
+    try {
+      setError(null);
+      const newNote = await createNote('New Note', '');
+      setNotes([newNote, ...notes]);
+      setSelectedNoteId(newNote.id);
+    } catch (err) {
+      setError('Failed to create note');
+      console.error('Error creating note:', err);
+    }
+  };
+
+  const handleDeleteNote = async (id: string) => {
+    try {
+      await deleteNote(id);
+      const filteredNotes = notes.filter(note => note.id !== id);
+      setNotes(filteredNotes);
+      
+      if (selectedNoteId === id && filteredNotes.length > 0) {
+        setSelectedNoteId(filteredNotes[0].id);
+      } else if (filteredNotes.length === 0) {
+        setSelectedNoteId('');
+      }
+    } catch (err) {
+      setError('Failed to delete note');
+      console.error('Error deleting note:', err);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading notes...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -75,7 +110,7 @@ export default function NotesPage() {
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-semibold text-gray-900">Notes</h1>
             <button 
-              onClick={addNote}
+              onClick={handleAddNote}
               className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center hover:bg-blue-600 transition-colors"
               title="New Note"
             >
@@ -87,6 +122,11 @@ export default function NotesPage() {
           <div className="text-sm text-gray-500">
             {notes.length} {notes.length === 1 ? 'note' : 'notes'}
           </div>
+          {error && (
+            <div className="mt-2 text-sm text-red-600 bg-red-50 p-2 rounded">
+              {error}
+            </div>
+          )}
         </div>
         
         {/* Notes List */}
@@ -95,7 +135,7 @@ export default function NotesPage() {
             notes={notes}
             selectedNoteId={selectedNoteId}
             onSelectNote={setSelectedNoteId}
-            onDeleteNote={deleteNote}
+            onDeleteNote={handleDeleteNote}
           />
         </div>
       </div>
@@ -105,7 +145,7 @@ export default function NotesPage() {
         {selectedNote ? (
           <NoteEditor 
             note={selectedNote}
-            onUpdateNote={updateNote}
+            onUpdateNote={handleUpdateNote}
           />
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-gray-400">

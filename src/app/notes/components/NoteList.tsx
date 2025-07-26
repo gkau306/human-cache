@@ -8,20 +8,22 @@ interface NoteListProps {
 }
 
 export default function NoteList({ notes, selectedNoteId, onSelectNote, onDeleteNote }: NoteListProps) {
-  const formatDate = (date: Date) => {
+  const formatDate = (date: Date | string) => {
+    // Ensure date is a Date object
+    const dateObj = date instanceof Date ? date : new Date(date);
     const now = new Date();
-    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+    const diffInHours = (now.getTime() - dateObj.getTime()) / (1000 * 60 * 60);
     
     if (diffInHours < 24) {
-      return date.toLocaleTimeString('en-US', { 
+      return dateObj.toLocaleTimeString('en-US', { 
         hour: 'numeric', 
         minute: '2-digit',
         hour12: true 
       });
     } else if (diffInHours < 168) { // 7 days
-      return date.toLocaleDateString('en-US', { weekday: 'short' });
+      return dateObj.toLocaleDateString('en-US', { weekday: 'short' });
     } else {
-      return date.toLocaleDateString('en-US', { 
+      return dateObj.toLocaleDateString('en-US', { 
         month: 'short', 
         day: 'numeric' 
       });
